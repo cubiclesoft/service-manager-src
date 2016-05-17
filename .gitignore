@@ -1,0 +1,8 @@
+servicemanager/*
+*.obj
+*.exe
+update.bat
+update.php
+servicemanager_nix_32
+servicemanager_nix_64
+servicemanager_mac
