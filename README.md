@@ -38,4 +38,4 @@ php test_service.php uninstall
 php test_service.php configdump
 ````
 
-You can write a test service in whatever language you want though.  It's simple and straightforward.
+You can, of course, write a test service in whatever language you want though.  It's simple and straightforward.
