@@ -20,7 +20,9 @@ Building Service Manager
 For some strange reason you are overcome by a bizarre desire to build this software product yourself.  There is no ./configure && make here.  Just good old-fashioned shell scripts.
 
 Windows (VC++ command-line):  build.bat
+
 Mac (gcc):  build_mac.sh
+
 Linux and many variants (gcc):  build_nix.sh
 
 You may need to chmod +x or something to get the script to run, but you already knew that.
