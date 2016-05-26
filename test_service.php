@@ -67,6 +67,10 @@
 			echo "Current service configuration:\n\n";
 			foreach ($result["options"] as $key => $val)  echo "  " . $key . " = " . $val . "\n";
 		}
+		else
+		{
+			echo "Command not recognized.  Run the service manager directly for anything other than 'install', 'uninstall', and 'dumpconfig'.\n";
+		}
 	}
 	else
 	{
