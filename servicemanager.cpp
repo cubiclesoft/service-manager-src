@@ -909,6 +909,7 @@ int _tmain(int argc, TCHAR **argv)
 			DWORD BytesNeeded;
 
 			_tprintf(_T("Stopping service..."));
+			fflush(stdout);
 
 			if (!::QueryServiceStatusEx(service, SC_STATUS_PROCESS_INFO, (LPBYTE)&ssp, sizeof(SERVICE_STATUS_PROCESS), &BytesNeeded))
 			{
@@ -943,6 +944,7 @@ int _tmain(int argc, TCHAR **argv)
 					if (ssp.dwCurrentState != SERVICE_STOPPED)
 					{
 						_tprintf(_T("."));
+						fflush(stdout);
 						::Sleep(1000);
 					}
 				} while (ssp.dwCurrentState != SERVICE_STOPPED);
@@ -1042,6 +1044,7 @@ int _tmain(int argc, TCHAR **argv)
 			DWORD BytesNeeded;
 
 			_tprintf(_T("Starting service..."));
+			fflush(stdout);
 
 			do
 			{
@@ -1057,6 +1060,7 @@ int _tmain(int argc, TCHAR **argv)
 				if (ssp.dwCurrentState == SERVICE_START_PENDING)
 				{
 					_tprintf(_T("."));
+					fflush(stdout);
 					::Sleep(1000);
 				}
 			} while (ssp.dwCurrentState == SERVICE_START_PENDING);
@@ -1098,10 +1102,12 @@ int _tmain(int argc, TCHAR **argv)
 		TempFile.Close();
 
 		_tprintf(_T("Service reloading..."));
+		fflush(stdout);
 		while (UTF8::File::Exists(TempBuffer.MxStr))
 		{
 			::Sleep(1000);
 			_tprintf(_T("."));
+			fflush(stdout);
 		}
 		_tprintf(_T("\n"));
 
