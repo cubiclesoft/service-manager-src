@@ -34,6 +34,8 @@ There is a test PHP-based service that handles 'notify.stop' and 'notify.reload'
 
 ````
 php test_service.php install
+php test_service.php start
+php test_service.php stop
 php test_service.php uninstall
 php test_service.php configdump
 ````
