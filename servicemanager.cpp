@@ -2065,7 +2065,12 @@ int main(int argc, char **argv)
 			UTF8::File TempFile;
 			TempFile.Open(TempBuffer.MxStr, O_RDONLY);
 
-			if (!TempFile.IsOpen())  printf("Unable to open '%s' for reading.  Service manager is not running.\n", TempBuffer.MxStr);
+			if (!TempFile.IsOpen())
+			{
+				printf("Unable to open '%s' for reading.  Service manager is not running.\n", TempBuffer.MxStr);
+
+				if (!strcasecmp(GxApp.MxMainAction, "stop"))  return 1;
+			}
 			else
 			{
 				char *Line;
@@ -2279,7 +2284,7 @@ int main(int argc, char **argv)
 				{
 					printf("Service is already running via service manager process %d.\n", TempPID);
 
-					return 1;
+					return 0;
 				}
 			}
 
