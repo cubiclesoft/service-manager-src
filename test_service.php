@@ -51,6 +51,18 @@
 			$result = $sm->Install($servicename, __FILE__, $args, $options, true);
 			if (!$result["success"])  DisplayError("Unable to install the '" . $servicename . "' service.", $result);
 		}
+		else if ($argv[1] == "start")
+		{
+			// Start the service.
+			$result = $sm->Start($servicename, true);
+			if (!$result["success"])  DisplayError("Unable to start the '" . $servicename . "' service.", $result);
+		}
+		else if ($argv[1] == "stop")
+		{
+			// Stop the service.
+			$result = $sm->Stop($servicename, true);
+			if (!$result["success"])  DisplayError("Unable to stop the '" . $servicename . "' service.", $result);
+		}
 		else if ($argv[1] == "uninstall")
 		{
 			// Uninstall the service.

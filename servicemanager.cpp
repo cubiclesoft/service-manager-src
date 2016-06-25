@@ -1830,8 +1830,20 @@ int main(int argc, char **argv)
 		TempBuffer.AppendStr("servicemanager_mac.launchd");
 
 		#else
-		// Use SysVinit for all other OSes.  They generally fallback to init.d.
-		TempBuffer.AppendStr("servicemanager_nix.sysvinit");
+
+		// Detect alternatives to LSB systems (e.g. systemd).
+		UTF8::File::FileStat TempStat;
+		bool UseSystemd = UTF8::File::Stat(TempStat, "/lib/systemd/system");
+		if (UseSystemd)
+		{
+			// Use the '.systemd' variant.
+			TempBuffer.AppendStr("servicemanager_nix.systemd");
+		}
+		else
+		{
+			// Use SysVinit for all other OSes.  They generally fallback to init.d.
+			TempBuffer.AppendStr("servicemanager_nix.sysvinit");
+		}
 
 		#endif
 
@@ -1867,19 +1879,56 @@ int main(int argc, char **argv)
 		FileData = FileData2;
 		y = y2;
 
+		// Replace @SERVICEPIDFILE@.
+		if (GxApp.MxPIDFileStr != NULL)  TempBuffer2.SetStr(GxApp.MxPIDFileStr);
+		else
+		{
+			TempBuffer2.SetStr(TempBuffer3.MxStr);
+			TempBuffer2.AppendStr(".pid");
+		}
+		FastReplace<char>::ReplaceAll(FileData2, y2, FileData, y, "@SERVICEPIDFILE@", (size_t)-1, TempBuffer2.MxStr, TempBuffer2.MxStrPos);
+		delete[] FileData;
+		FileData = FileData2;
+		y = y2;
+
 		// Store the system startup configuration file.
+		int Mode;
 		#ifdef __APPLE__
+
+		// Use a '.plist'.
 		TempBuffer.SetStr("/Library/LaunchDaemons/com.servicemanager.");
 		TempBuffer.AppendStr(GxApp.MxServiceName);
 		TempBuffer.AppendStr(".plist");
 
+		Mode = 0644;
+
 		#else
-		TempBuffer.SetStr("/etc/init.d/");
-		TempBuffer.AppendStr(GxApp.MxServiceName);
+
+		if (UseSystemd)
+		{
+			// Use the 'systemd' variant.
+			TempBuffer.SetStr("/lib/systemd/system/");
+			TempBuffer.AppendStr(GxApp.MxServiceName);
+			TempBuffer.AppendStr(".service");
+
+			Mode = 0644;
+		}
+		else
+		{
+			// Bludgeon non-conformant/broken systems into a standard environment.
+			TempBuffer.SetStr("/etc/init.d/");
+			UTF8::Dir::Mkdir(TempBuffer.MxStr, 0755, true);
+
+			// Carry on.
+			TempBuffer.AppendStr(GxApp.MxServiceName);
+
+			Mode = 0755;
+		}
 
 		#endif
 
-		if (!TempFile.Open(TempBuffer.MxStr, O_CREAT | O_WRONLY | O_TRUNC, UTF8::File::ShareBoth, 0744))
+		// Store the startup script in the target location.
+		if (!TempFile.Open(TempBuffer.MxStr, O_CREAT | O_WRONLY | O_TRUNC, UTF8::File::ShareBoth, Mode))
 		{
 			printf("Unable to create '%s'.\n", TempBuffer.MxStr);
 
@@ -1893,6 +1942,65 @@ int main(int argc, char **argv)
 		delete[] FileData;
 
 		TempFile.Close();
+
+		#ifndef __APPLE__
+		// Dear Linux kernel developers, please build an official API or this nonsense will get worse.
+		bool Installed = false;
+
+		if (UseSystemd)
+		{
+			// Register using 'systemctl' (systemd).  This should really be a fallback.  Unfortunately, systemd violates LSB.
+			TempBuffer.SetStr("systemctl enable '");
+			TempBuffer.AppendStr(GxApp.MxServiceName);
+			TempBuffer.AppendStr("'");
+			if (system(TempBuffer.MxStr) != -1)  Installed = true;
+		}
+
+		if (!Installed)
+		{
+			// Register using the LSB (Linux Standard Base) method.
+			// If your system doesn't have the executable (script) update-rc.d in the path, then it's probably broken.
+			TempBuffer.SetStr("update-rc.d '");
+			TempBuffer.AppendStr(GxApp.MxServiceName);
+			TempBuffer.AppendStr("' defaults >/dev/null 2>&1");
+			if (system(TempBuffer.MxStr) != -1)  Installed = true;
+		}
+
+		if (!Installed)
+		{
+			// Fallback to 'chkconfig' (RedHat/Fedora/CentOS).
+			TempBuffer.SetStr("chkconfig '");
+			TempBuffer.AppendStr(GxApp.MxServiceName);
+			TempBuffer.AppendStr("' on >/dev/null 2>&1");
+			if (system(TempBuffer.MxStr) != -1)  Installed = true;
+		}
+
+		if (!Installed)
+		{
+			// Fallback to adding an @reboot line to cron.  Bludgeon the parent directory into existence.
+			TempBuffer.SetStr("/etc/cron.d/");
+			UTF8::Dir::Mkdir(TempBuffer.MxStr, 0755);
+			TempBuffer.AppendStr(GxApp.MxServiceName);
+
+			if (!TempFile.Open(TempBuffer.MxStr, O_CREAT | O_WRONLY | O_TRUNC, UTF8::File::ShareBoth, 0644))
+			{
+				printf("Unable to create '%s'.\n", TempBuffer.MxStr);
+
+				return 1;
+			}
+
+			printf("Warning:  '%s' has been created on your non-conformant system.  If you don't have a 'cron' package installed with @reboot support, or your cron does not process /etc/cron.d at boot, then the system service will likely not start and have to be started manually.\n\n", TempBuffer.MxStr);
+			printf("Note:  Service Manager prefers Linux Standard Base (LSB) compliance, which includes an 'update-rc.d' script for registering system services even if you use an alternative to SysV init (e.g. systemd).  If you don't want to see this message in the future, install a functional 'update-rc.d' script for your OS.\n\n");
+
+			TempBuffer.SetStr("@reboot root '/etc/init.d/");
+			TempBuffer.AppendStr(GxApp.MxServiceName);
+			TempBuffer.AppendStr("' start >/dev/null 2>&1");
+
+			TempFile.Write(TempBuffer.MxStr, y2);
+
+			TempFile.Close();
+		}
+		#endif
 
 		printf("Service successfully installed.\n");
 	}
@@ -2005,6 +2113,50 @@ int main(int argc, char **argv)
 			StaticMixedVar<char[8192]> TempBuffer;
 			size_t y;
 
+			#ifndef __APPLE__
+
+			// Dear Linux kernel developers, please build an official API or this nonsense will get worse.
+			UTF8::File::FileStat TempStat;
+			bool UseSystemd = UTF8::File::Stat(TempStat, "/lib/systemd/system");
+			bool Uninstalled = false;
+
+			if (UseSystemd)
+			{
+				// Unregister using 'systemctl' (systemd).  This should really be a fallback.
+				TempBuffer.SetStr("systemctl disable '");
+				TempBuffer.AppendStr(GxApp.MxServiceName);
+				TempBuffer.AppendStr("'");
+				if (system(TempBuffer.MxStr) != -1)  Uninstalled = true;
+			}
+
+			if (!Uninstalled)
+			{
+				// Unregister using the LSB (Linux Standard Base) method.
+				// If your system doesn't have the executable (script) update-rc.d in the path, then it's probably broken.
+				TempBuffer.SetStr("update-rc.d '");
+				TempBuffer.AppendStr(GxApp.MxServiceName);
+				TempBuffer.AppendStr("' remove >/dev/null 2>&1");
+				if (system(TempBuffer.MxStr) != -1)  Uninstalled = true;
+			}
+
+			if (!Uninstalled)
+			{
+				// Fallback to 'chkconfig' (RedHat/Fedora/CentOS).
+				TempBuffer.SetStr("chkconfig '");
+				TempBuffer.AppendStr(GxApp.MxServiceName);
+				TempBuffer.AppendStr("' off >/dev/null 2>&1");
+				if (system(TempBuffer.MxStr) != -1)  Uninstalled = true;
+			}
+
+			if (!Uninstalled)
+			{
+				// Fallback to removing a cron.d file.
+				TempBuffer.SetStr("/etc/cron.d/");
+				TempBuffer.AppendStr(GxApp.MxServiceName);
+				UTF8::File::Delete(TempBuffer.MxStr);
+			}
+			#endif
+
 			// Delete the system startup configuration file.
 			#ifdef __APPLE__
 			TempBuffer.SetStr("/Library/LaunchDaemons/com.servicemanager.");
@@ -2012,8 +2164,20 @@ int main(int argc, char **argv)
 			TempBuffer.AppendStr(".plist");
 
 			#else
-			TempBuffer.SetStr("/etc/init.d/");
-			TempBuffer.AppendStr(GxApp.MxServiceName);
+
+			if (UseSystemd)
+			{
+				// Remove the systemd service file.
+				TempBuffer.SetStr("/lib/systemd/system/");
+				TempBuffer.AppendStr(GxApp.MxServiceName);
+				TempBuffer.AppendStr(".service");
+			}
+			else
+			{
+				// Everything else should be in /etc/init.d/
+				TempBuffer.SetStr("/etc/init.d/");
+				TempBuffer.AppendStr(GxApp.MxServiceName);
+			}
 
 			#endif
 
