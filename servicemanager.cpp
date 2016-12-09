@@ -1952,7 +1952,7 @@ int main(int argc, char **argv)
 			// Register using 'systemctl' (systemd).  This should really be a fallback.  Unfortunately, systemd violates LSB.
 			TempBuffer.SetStr("systemctl enable '");
 			TempBuffer.AppendStr(GxApp.MxServiceName);
-			TempBuffer.AppendStr("'");
+			TempBuffer.AppendStr("' >/dev/null 2>&1");
 			if (system(TempBuffer.MxStr) != -1)  Installed = true;
 		}
 
@@ -2130,7 +2130,7 @@ int main(int argc, char **argv)
 				// Unregister using 'systemctl' (systemd).  This should really be a fallback.
 				TempBuffer.SetStr("systemctl disable '");
 				TempBuffer.AppendStr(GxApp.MxServiceName);
-				TempBuffer.AppendStr("'");
+				TempBuffer.AppendStr("' >/dev/null 2>&1");
 				if (system(TempBuffer.MxStr) != -1)  Uninstalled = true;
 			}
 
