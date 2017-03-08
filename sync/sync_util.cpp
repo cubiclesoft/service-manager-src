@@ -481,7 +481,7 @@ namespace CubicleSoft
 			Result.MxCond = reinterpret_cast<pthread_cond_t *>(Mem);
 		}
 
-		void Util::InitUnixEvent(UnixEventWrapper &UnixEvent, bool Shared, bool Manual)
+		void Util::InitUnixEvent(UnixEventWrapper &UnixEvent, bool Shared, bool Manual, bool Signaled)
 		{
 			pthread_mutexattr_t MutexAttr;
 			pthread_condattr_t CondAttr;
@@ -497,7 +497,7 @@ namespace CubicleSoft
 
 			pthread_mutex_init(UnixEvent.MxMutex, &MutexAttr);
 			UnixEvent.MxManual[0] = (Manual ? '\x01' : '\x00');
-			UnixEvent.MxSignaled[0] = '\x00';
+			UnixEvent.MxSignaled[0] = (Signaled ? '\x01' : '\x00');
 			UnixEvent.MxWaiting[0] = 0;
 			pthread_cond_init(UnixEvent.MxCond, &CondAttr);
 
@@ -520,7 +520,7 @@ namespace CubicleSoft
 			bool Result = false;
 
 			// Avoid a potential starvation issue by only allowing signaled manual events OR if there are no other waiting threads.
-			if (UnixEvent.MxSignaled[0] != '\x00' && (UnixEvent.MxManual[0] == '\x00' || !UnixEvent.MxWaiting[0]))
+			if (UnixEvent.MxSignaled[0] != '\x00' && (UnixEvent.MxManual[0] != '\x00' || !UnixEvent.MxWaiting[0]))
 			{
 				// Reset auto events.
 				if (UnixEvent.MxManual[0] == '\x00')  UnixEvent.MxSignaled[0] = '\x00';
@@ -538,10 +538,10 @@ namespace CubicleSoft
 					if (Result2 != 0)  break;
 				} while (UnixEvent.MxSignaled[0] == '\x00');
 
+				UnixEvent.MxWaiting[0]--;
+
 				if (Result2 == 0)
 				{
-					UnixEvent.MxWaiting[0]--;
-
 					// Reset auto events.
 					if (UnixEvent.MxManual[0] == '\x00')  UnixEvent.MxSignaled[0] = '\x00';
 
@@ -554,15 +554,21 @@ namespace CubicleSoft
 			}
 			else
 			{
-				UnixEvent.MxWaiting[0]++;
-
 				struct timespec TempTime;
 
-				if (CSGX__ClockGetTimeRealtime(&TempTime) == -1)  return false;
+				if (CSGX__ClockGetTimeRealtime(&TempTime) == -1)
+				{
+					pthread_mutex_unlock(UnixEvent.MxMutex);
+
+					return false;
+				}
+
 				TempTime.tv_sec += Wait / 1000;
 				TempTime.tv_nsec += (Wait % 1000) * 1000000;
 				TempTime.tv_sec += TempTime.tv_nsec / 1000000000;
 				TempTime.tv_nsec = TempTime.tv_nsec % 1000000000;
+
+				UnixEvent.MxWaiting[0]++;
 
 				int Result2;
 				do
@@ -572,10 +578,10 @@ namespace CubicleSoft
 					if (Result2 != 0)  break;
 				} while (UnixEvent.MxSignaled[0] == '\x00');
 
+				UnixEvent.MxWaiting[0]--;
+
 				if (Result2 == 0)
 				{
-					UnixEvent.MxWaiting[0]--;
-
 					// Reset auto events.
 					if (UnixEvent.MxManual[0] == '\x00')  UnixEvent.MxSignaled[0] = '\x00';
 
@@ -595,7 +601,7 @@ namespace CubicleSoft
 			UnixEvent.MxSignaled[0] = '\x01';
 
 			// Let all waiting threads through for manual events, otherwise just one waiting thread (if any).
-			if (UnixEvent.MxManual[0] == '\x00')  pthread_cond_broadcast(UnixEvent.MxCond);
+			if (UnixEvent.MxManual[0] != '\x00')  pthread_cond_broadcast(UnixEvent.MxCond);
 			else  pthread_cond_signal(UnixEvent.MxCond);
 
 			pthread_mutex_unlock(UnixEvent.MxMutex);
