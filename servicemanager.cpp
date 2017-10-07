@@ -1,6 +1,6 @@
 // A simple program whose sole job is to manage a single executable as a service.
 // Platform and language agnostic (once compiled).
-// (C) 2016 CubicleSoft.  All Rights Reserved.
+// (C) 2017 CubicleSoft.  All Rights Reserved.
 
 #ifndef UNICODE
 #define UNICODE
@@ -2716,8 +2716,8 @@ int main(int argc, char **argv)
 							if (chdir(GxApp.MxStartDir) < 0)  WriteLog(LogFile, "Unable to change directories.");
 						}
 
-						if (UserID && setuid(UserID) < 0)  WriteLog(LogFile, "Unable to setuid().");
 						if (GroupID && setgid(GroupID) < 0)  WriteLog(LogFile, "Unable to setgid().");
+						if (UserID && setuid(UserID) < 0)  WriteLog(LogFile, "Unable to setuid().");
 
 						execv(CmdLineArgs[0], CmdLineArgs);
 
