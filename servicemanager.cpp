@@ -1248,7 +1248,7 @@ int _tmain(int argc, TCHAR **argv)
 		}
 
 		UTF8::File TempFile;
-		if (!OpenServiceInfoFile(TempFile, O_WRONLY | O_APPEND, TempBuffer))  return false;
+		if (!OpenServiceInfoFile(TempFile, O_WRONLY | O_APPEND, TempBuffer))  return 1;
 
 		// Command to execute.
 		TempBuffer.SetStr(TempBuffer2.MxStr);
@@ -2492,7 +2492,7 @@ int main(int argc, char **argv)
 		}
 
 		UTF8::File TempFile;
-		if (!OpenServiceInfoFile(TempFile, O_WRONLY | O_APPEND, TempBuffer))  return false;
+		if (!OpenServiceInfoFile(TempFile, O_WRONLY | O_APPEND, TempBuffer))  return 1;
 
 		// Command to execute.
 		TempBuffer.SetStr(TempBuffer2.MxStr);
