@@ -1893,6 +1893,18 @@ int main(int argc, char **argv)
 
 		// Replace @SERVICEPIDFILE@.
 		if (GxApp.MxPIDFileStr != NULL)  TempBuffer2.SetStr(GxApp.MxPIDFileStr);
+		else if (UTF8::File::Exists("/run/"))
+		{
+			TempBuffer2.AppendStr("/run/");
+			TempBuffer2.AppendStr(GxApp.MxServiceName);
+			TempBuffer2.AppendStr(".pid");
+		}
+		else if (UTF8::File::Exists("/var/run/"))
+		{
+			TempBuffer2.AppendStr("/var/run/");
+			TempBuffer2.AppendStr(GxApp.MxServiceName);
+			TempBuffer2.AppendStr(".pid");
+		}
 		else
 		{
 			TempBuffer2.SetStr(TempBuffer3.MxStr);
