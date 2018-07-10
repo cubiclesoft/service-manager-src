@@ -1766,6 +1766,18 @@ int main(int argc, char **argv)
 		// PID file.
 		TempBuffer.SetStr("pid=");
 		if (GxApp.MxPIDFileStr != NULL)  TempBuffer.AppendStr(GxApp.MxPIDFileStr);
+		else if (UTF8::File::Exists("/run/"))
+		{
+			TempBuffer.AppendStr("/run/");
+			TempBuffer.AppendStr(GxApp.MxServiceName);
+			TempBuffer.AppendStr(".pid");
+		}
+		else if (UTF8::File::Exists("/var/run/"))
+		{
+			TempBuffer.AppendStr("/var/run/");
+			TempBuffer.AppendStr(GxApp.MxServiceName);
+			TempBuffer.AppendStr(".pid");
+		}
 		else
 		{
 			TempBuffer.AppendStr(TempBuffer3.MxStr);
