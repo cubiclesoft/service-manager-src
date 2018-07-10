@@ -1895,13 +1895,13 @@ int main(int argc, char **argv)
 		if (GxApp.MxPIDFileStr != NULL)  TempBuffer2.SetStr(GxApp.MxPIDFileStr);
 		else if (UTF8::File::Exists("/run/"))
 		{
-			TempBuffer2.AppendStr("/run/");
+			TempBuffer2.SetStr("/run/");
 			TempBuffer2.AppendStr(GxApp.MxServiceName);
 			TempBuffer2.AppendStr(".pid");
 		}
 		else if (UTF8::File::Exists("/var/run/"))
 		{
-			TempBuffer2.AppendStr("/var/run/");
+			TempBuffer2.SetStr("/var/run/");
 			TempBuffer2.AppendStr(GxApp.MxServiceName);
 			TempBuffer2.AppendStr(".pid");
 		}
