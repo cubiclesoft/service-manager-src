@@ -1,6 +1,6 @@
 // A simple program whose sole job is to manage a single executable as a service.
 // Platform and language agnostic (once compiled).
-// (C) 2017 CubicleSoft.  All Rights Reserved.
+// (C) 2018 CubicleSoft.  All Rights Reserved.
 
 #ifndef UNICODE
 #define UNICODE
@@ -142,7 +142,7 @@ void WriteLog(UTF8::File &LogFile, const char *Message, bool Display = true)
 
 void DumpSyntax(TCHAR *currfile)
 {
-	_tprintf(_T("(C) 2016 CubicleSoft.  All Rights Reserved.\n\n"));
+	_tprintf(_T("(C) 2018 CubicleSoft.  All Rights Reserved.\n\n"));
 
 	_tprintf(_T("Syntax:\n\n%s [options] action service-name [[NotifyFile | CustomActionName CustomActionDescription] ExecutableToRun [arguments]]\n\n"), currfile);
 
@@ -1391,7 +1391,7 @@ int _tmain(int argc, TCHAR **argv)
 
 void DumpSyntax(char *currfile)
 {
-	printf("(C) 2016 CubicleSoft.  All Rights Reserved.\n\n");
+	printf("(C) 2018 CubicleSoft.  All Rights Reserved.\n\n");
 
 	printf("Syntax:\n\n%s [options] action service-name [[NotifyFile | CustomActionName CustomActionDescription] ExecutableToRun [arguments]]\n\n", currfile);
 
@@ -1850,11 +1850,17 @@ int main(int argc, char **argv)
 		{
 			// Use the '.systemd' variant.
 			TempBuffer.AppendStr("servicemanager_nix.systemd");
+
+			// If the service file does not exist, try /usr/share.
+			if (!UTF8::File::Exists(TempBuffer.MxStr))  TempBuffer.SetStr("/usr/share/servicemanager/servicemanager_nix.systemd");
 		}
 		else
 		{
 			// Use SysVinit for all other OSes.  They generally fallback to init.d.
 			TempBuffer.AppendStr("servicemanager_nix.sysvinit");
+
+			// If the service file does not exist, try /usr/share.
+			if (!UTF8::File::Exists(TempBuffer.MxStr))  TempBuffer.SetStr("/usr/share/servicemanager/servicemanager_nix.sysvinit");
 		}
 
 		#endif

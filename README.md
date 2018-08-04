@@ -11,6 +11,7 @@ Features
 --------
 
 * Statically compiled targets.
+* Local build and global install option for some platforms.
 * Has a liberal open source license.  MIT or LGPL, your choice.
 * Sits on GitHub for all of that pull request and issue tracker goodness to easily submit changes and ideas respectively.
 
@@ -26,6 +27,22 @@ Mac (gcc):  build_mac.sh
 Linux and many variants (gcc):  build_nix.sh
 
 You may need to chmod +x or something to get the script to run, but you already knew that.
+
+Building and Installing Locally
+-------------------------------
+
+The primary target platform for Service Manager is the unified x86/x64 architecture (Windows, Mac, and Linux).  However, for *NIX platforms on other architectures (e.g. the fairly popular ARM architecture), Service Manager can be compiled and optionally installed on the target system.
+
+Simply run:
+
+```
+./build_nix.sh
+sudo ./install_nix.sh
+```
+
+Which will put the compiled binary at `/usr/local/bin/servicemanager` and the base service platform files into `/usr/share/servicemanager/`.
+
+When Service Manager is installed as described above, the Service Manager SDK will generally prefer using the installed version instead of binaries that are bundled with a project.
 
 Testing Service Manager
 -----------------------
