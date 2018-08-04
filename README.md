@@ -36,7 +36,7 @@ The primary target platform for Service Manager is the unified x86/x64 architect
 Simply run:
 
 ```
-./build_nix.sh
+./build_nix.sh local
 sudo ./install_nix.sh
 ```
 
