@@ -1,71 +1,81 @@
 // A mixed, flexible variable data type (plain ol' data - POD) with all-public data access.
 // (C) 2021 CubicleSoft.  All Rights Reserved.
 
-#ifndef CUBICLESOFT_STATIC_MIXED_VAR
-#define CUBICLESOFT_STATIC_MIXED_VAR
+#ifndef CUBICLESOFT_STATIC_WC_MIXED_VAR
+#define CUBICLESOFT_STATIC_WC_MIXED_VAR
 
 #include <cstdint>
 #include <cstddef>
 #include <cstring>
 #include <cstdio>
 
+#if defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(WIN64)
+	#include <windows.h>
+#else
+	#include <wchar.h>
+
+	#ifndef WCHAR
+		#define WCHAR wchar_t
+	#endif
+#endif
+
 namespace CubicleSoft
 {
-	enum StaticMixedVarModes
+	enum StaticWCMixedVarModes
 	{
-		MV_None,
-		MV_Bool,
-		MV_Int,
-		MV_UInt,
-		MV_Double,
-		MV_Str
+		WCMV_None,
+		WCMV_Bool,
+		WCMV_Int,
+		WCMV_UInt,
+		WCMV_Double,
+		WCMV_Str
 	};
 
-	// Must be used like:  StaticMixedVar<char[8192]>
+	// Must be used like:  StaticWCMixedVar<WCHAR[8192]>
 	// Designed to be extended but not overridden.
 	template <class T>
-	class StaticMixedVar
+	class StaticWCMixedVar
 	{
 	public:
-		StaticMixedVarModes MxMode;
+		StaticWCMixedVarModes MxMode;
 		std::int64_t MxInt;
 		double MxDouble;
 		T MxStr;
 		size_t MxStrPos;
 
-		StaticMixedVar() : MxMode(MV_None), MxInt(0), MxDouble(0.0), MxStrPos(0)
+		StaticWCMixedVar() : MxMode(WCMV_None), MxInt(0), MxDouble(0.0), MxStrPos(0)
 		{
 		}
 
 		// Some functions for those who prefer member functions over directly accessing raw class data.
 		inline bool IsNone()
 		{
-			return (MxMode == MV_None);
+			return (MxMode == WCMV_None);
 		}
 
 		inline bool IsBool()
 		{
-			return (MxMode == MV_Bool);
+			return (MxMode == WCMV_Bool);
 		}
 
 		inline bool IsInt()
 		{
-			return (MxMode == MV_Int);
+			return (MxMode == WCMV_Int);
 		}
 
 		inline bool IsUInt()
 		{
-			return (MxMode == MV_UInt);
+			return (MxMode == WCMV_UInt);
 		}
 
 		inline bool IsDouble()
 		{
-			return (MxMode == MV_Double);
+			return (MxMode == WCMV_Double);
 		}
 
 		inline bool IsStr()
 		{
-			return (MxMode == MV_Str);
+			return (MxMode == WCMV_Str);
 		}
 
 		inline bool GetBool()
@@ -88,7 +98,7 @@ namespace CubicleSoft
 			return MxDouble;
 		}
 
-		inline char *GetStr()
+		inline WCHAR *GetStr()
 		{
 			return MxStr;
 		}
@@ -100,102 +110,109 @@ namespace CubicleSoft
 
 		inline size_t GetMaxSize()
 		{
-			return sizeof(MxStr);
+			return sizeof(MxStr) / sizeof(WCHAR);
 		}
 
 		inline void SetBool(const bool newbool)
 		{
-			MxMode = MV_Bool;
+			MxMode = WCMV_Bool;
 			MxInt = (int)newbool;
 		}
 
 		inline void SetInt(const std::int64_t newint)
 		{
-			MxMode = MV_Int;
+			MxMode = WCMV_Int;
 			MxInt = newint;
 		}
 
 		inline void SetUInt(const std::uint64_t newint)
 		{
-			MxMode = MV_UInt;
+			MxMode = WCMV_UInt;
 			MxInt = (std::int64_t)newint;
 		}
 
 		inline void SetDouble(const double newdouble)
 		{
-			MxMode = MV_Double;
+			MxMode = WCMV_Double;
 			MxDouble = newdouble;
 		}
 
-		void SetStr(const char *str)
+		void SetStr(const WCHAR *str)
 		{
-			MxMode = MV_Str;
+			MxMode = WCMV_Str;
 			MxStrPos = 0;
-			while (MxStrPos < sizeof(MxStr) - 1 && *str)
+			while (MxStrPos < (sizeof(MxStr) / sizeof(WCHAR)) - 1 && *str)
 			{
 				MxStr[MxStrPos++] = *str++;
 			}
-			MxStr[MxStrPos] = '\0';
+			MxStr[MxStrPos] = L'\0';
 		}
 
-		void SetData(const char *str, size_t size)
+		// Doesn't do anything fancy beyond expanding characters to fill the space of a wide character.
+		void SetStr(const char *str)
 		{
-			MxMode = MV_Str;
+			MxMode = WCMV_Str;
 			MxStrPos = 0;
-			while (MxStrPos < sizeof(MxStr) - 1 && size)
+			while (MxStrPos < (sizeof(MxStr) / sizeof(WCHAR)) - 1 && *str)
 			{
-				MxStr[MxStrPos++] = *str++;
-				size--;
+				MxStr[MxStrPos++] = (WCHAR)*str++;
 			}
-			MxStr[MxStrPos] = '\0';
+			MxStr[MxStrPos] = L'\0';
 		}
 
 		template<class... Args>
-		void SetFormattedStr(const char *format, Args... args)
+		void SetFormattedStr(const WCHAR *format, Args... args)
 		{
-			MxMode = MV_Str;
+			MxMode = WCMV_Str;
 
 #if (defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(WIN64)) && defined(_MSC_VER) && _MSC_VER < 1900
-			_snprintf_s(MxStr, sizeof(MxStr), _TRUNCATE, format, args...);
-			MxStr[sizeof(MxStr) - 1] = '\0';
+			swprintf_s(MxStr, sizeof(MxStr) / sizeof(WCHAR), format, args...);
+			MxStr[sizeof(MxStr) / sizeof(WCHAR) - 1] = '\0';
 #else
-			if (snprintf(MxStr, sizeof(MxStr), format, args...) < 0)  MxStr[0] = '\0';
+			if (swprintf(MxStr, sizeof(MxStr) / sizeof(WCHAR), format, args...) < 0)  MxStr[0] = '\0';
 #endif
 
-			MxStrPos = strlen(MxStr);
+			MxStrPos = wcslen(MxStr);
 		}
 
 		// Prepend functions only prepend if there is enough space.
-		void PrependStr(const char *str)
+		void PrependStr(const WCHAR *str)
 		{
-			size_t y = strlen(str);
-			if (MxStrPos + y < sizeof(MxStr) - 1)
+			size_t y = wcslen(str);
+			size_t y2 = y * sizeof(WCHAR);
+			if (MxStrPos + y < (sizeof(MxStr) / sizeof(WCHAR)) - 1)
 			{
-				memmove(MxStr + y, MxStr, MxStrPos + 1);
-				memcpy(MxStr, str, y);
+				memmove(MxStr + y, MxStr, (MxStrPos + 1) * sizeof(WCHAR));
+				memcpy(MxStr, str, y2);
 				MxStrPos += y;
 			}
 		}
 
-		void PrependData(const char *str, size_t size)
+		// Doesn't do anything fancy beyond expanding characters to fill the space of a wide character.
+		void PrependStr(const char *str)
 		{
-			if (MxStrPos + size < sizeof(MxStr) - 1)
+			size_t y = strlen(str);
+			if (MxStrPos + y < (sizeof(MxStr) / sizeof(WCHAR)) - 1)
 			{
-				memmove(MxStr + size, MxStr, MxStrPos + 1);
-				memcpy(MxStr, str, size);
-				MxStrPos += size;
+				memmove(MxStr + y, MxStr, (MxStrPos + 1) * sizeof(WCHAR));
+				MxStrPos += y;
+
+				for (size_t x = 0; x < y; x++)
+				{
+					MxStr[x] = (WCHAR)*str++;
+				}
 			}
 		}
 
 		template<class... Args>
-		void PrependFormattedStr(const char *format, Args... args)
+		void PrependFormattedStr(const WCHAR *format, Args... args)
 		{
 			T tempbuffer;
 #if (defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(WIN64)) && defined(_MSC_VER) && _MSC_VER < 1900
-			_snprintf_s(tempbuffer, sizeof(tempbuffer), _TRUNCATE, format, args...);
-			tempbuffer[sizeof(tempbuffer) - 1] = '\0';
+			swprintf_s(tempbuffer, sizeof(tempbuffer) / sizeof(WCHAR), format, args...);
+			tempbuffer[sizeof(tempbuffer) / sizeof(WCHAR) - 1] = '\0';
 #else
-			snprintf(tempbuffer, sizeof(tempbuffer), format, args...);
+			if (swprintf(tempbuffer, sizeof(tempbuffer) / sizeof(WCHAR), format, args...) < 0)  tempbuffer[0] = '\0';
 #endif
 
 			PrependStr(tempbuffer);
@@ -220,40 +237,40 @@ namespace CubicleSoft
 			_snprintf_s(tempbuffer, sizeof(tempbuffer), _TRUNCATE, "%1.*g", precision, val);
 			tempbuffer[sizeof(tempbuffer) - 1] = '\0';
 #else
-			if (snprintf(tempbuffer, sizeof(tempbuffer), "%1.*g", (int)precision, val) < 0)  tempbuffer[0] = '\0';
+			snprintf(tempbuffer, sizeof(tempbuffer), "%1.*g", (int)precision, val);
 #endif
 
 			PrependStr(tempbuffer);
 		}
 
-		void AppendStr(const char *str)
+		void AppendStr(const WCHAR *str)
 		{
-			while (MxStrPos < sizeof(MxStr) - 1 && *str)
+			while (MxStrPos < (sizeof(MxStr) / sizeof(WCHAR)) - 1 && *str)
 			{
 				MxStr[MxStrPos++] = *str++;
 			}
-			MxStr[MxStrPos] = '\0';
+			MxStr[MxStrPos] = L'\0';
 		}
 
-		void AppendData(const char *str, size_t size)
+		// Doesn't do anything fancy beyond expanding characters to fill the space of a wide character.
+		void AppendStr(const char *str)
 		{
-			while (MxStrPos < sizeof(MxStr) - 1 && size)
+			while (MxStrPos < (sizeof(MxStr) / sizeof(WCHAR)) - 1 && *str)
 			{
-				MxStr[MxStrPos++] = *str++;
-				size--;
+				MxStr[MxStrPos++] = (WCHAR)*str++;
 			}
-			MxStr[MxStrPos] = '\0';
+			MxStr[MxStrPos] = L'\0';
 		}
 
 		template<class... Args>
-		void AppendFormattedStr(const char *format, Args... args)
+		void AppendFormattedStr(const WCHAR *format, Args... args)
 		{
 			T tempbuffer;
 #if (defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(WIN64)) && defined(_MSC_VER) && _MSC_VER < 1900
-			_snprintf_s(tempbuffer, sizeof(tempbuffer), _TRUNCATE, format, args...);
-			tempbuffer[sizeof(tempbuffer) - 1] = '\0';
+			swprintf_s(tempbuffer, sizeof(tempbuffer) / sizeof(WCHAR), format, args...);
+			tempbuffer[sizeof(tempbuffer) / sizeof(WCHAR) - 1] = '\0';
 #else
-			if (snprintf(tempbuffer, sizeof(tempbuffer), format, args...) < 0)  tempbuffer[0] = '\0';
+			if (swprintf(tempbuffer, sizeof(tempbuffer) / sizeof(WCHAR), format, args...) < 0)  tempbuffer[0] = '\0';
 #endif
 
 			AppendStr(tempbuffer);
@@ -278,45 +295,45 @@ namespace CubicleSoft
 			_snprintf_s(tempbuffer, sizeof(tempbuffer), _TRUNCATE, "%1.*g", precision, val);
 			tempbuffer[sizeof(tempbuffer) - 1] = '\0';
 #else
-			if (snprintf(tempbuffer, sizeof(tempbuffer), "%1.*g", (int)precision, val) < 0)  tempbuffer[0] = '\0';
+			snprintf(tempbuffer, sizeof(tempbuffer), "%1.*g", (int)precision, val);
 #endif
 
 			AppendStr(tempbuffer);
 		}
 
-		inline void AppendChar(const char chr)
+		inline void AppendChar(const WCHAR chr)
 		{
-			if (MxStrPos < sizeof(MxStr) - 1)
+			if (MxStrPos < (sizeof(MxStr) / sizeof(WCHAR)) - 1)
 			{
 				MxStr[MxStrPos++] = chr;
-				MxStr[MxStrPos] = '\0';
+				MxStr[MxStrPos] = L'\0';
 			}
 		}
 
-		inline void AppendMissingChar(const char chr)
+		inline void AppendMissingChar(const WCHAR chr)
 		{
-			if ((!MxStrPos || MxStr[MxStrPos - 1] != chr) && MxStrPos < sizeof(MxStr) - 1)
+			if ((!MxStrPos || MxStr[MxStrPos - 1] != chr) && MxStrPos < (sizeof(MxStr) / sizeof(WCHAR)) - 1)
 			{
 				MxStr[MxStrPos++] = chr;
-				MxStr[MxStrPos] = '\0';
+				MxStr[MxStrPos] = L'\0';
 			}
 		}
 
-		inline bool RemoveTrailingChar(const char chr)
+		inline bool RemoveTrailingChar(const WCHAR chr)
 		{
 			if (!MxStrPos || MxStr[MxStrPos - 1] != chr)  return false;
 
-			MxStr[--MxStrPos] = '\0';
+			MxStr[--MxStrPos] = L'\0';
 
 			return true;
 		}
 
 		inline void SetSize(const size_t size)
 		{
-			if (size < sizeof(MxStr))
+			if (size < (sizeof(MxStr) / sizeof(WCHAR)))
 			{
 				MxStrPos = size;
-				MxStr[MxStrPos] = '\0';
+				MxStr[MxStrPos] = L'\0';
 			}
 		}
 

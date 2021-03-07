@@ -5,6 +5,7 @@
 #include "../templates/fast_find_replace.h"
 #include <cstdlib>
 #include <cstring>
+#include <cstdio>
 #include <new>
 
 namespace CubicleSoft
@@ -64,7 +65,7 @@ namespace CubicleSoft
 			return SetMainPtr(new StaticVector<Queue<char>>(MaxCacheBits));
 		}
 
-		void *TLS::malloc(size_t Size)
+		void *TLS::malloc(size_t Size, size_t Align)
 		{
 			if (Size == 0)  return NULL;
 
@@ -72,13 +73,11 @@ namespace CubicleSoft
 			if (MainPtr == NULL)  return NULL;
 
 			void *Data;
+			if (!Align)  Align = (Size > 4 ? 8 : (Size > 2 ? 4 : 2));
+			Size += Align - 1;
 			size_t Pos = NormalizeBitPosition(Size);
-			Size++;
-			if (MainPtr->GetSize() <= Pos)
-			{
-				Data = ::malloc(Size);
-				Data = (std::uint8_t *)Data + 1;
-			}
+			Size += 2;
+			if (MainPtr->GetSize() <= Pos)  Data = ::malloc(Size);
 			else
 			{
 				QueueNode<char> *Node = (*MainPtr)[Pos].Shift();
@@ -91,16 +90,37 @@ namespace CubicleSoft
 					Node = (QueueNode<char> *)Data;
 				}
 
-				Data = ((std::uint8_t *)Node) + 1;
+				Data = ((std::uint8_t *)Node);
 			}
 
-			// Store the position.  Safe for QueueNode since data storage is after the NextNode pointer.
+			Data = ((std::uint8_t *)Data) + 2;
+
+			size_t x = (size_t)((std::uintptr_t)Data % Align);
+			if (x)
+			{
+				x = Align - x;
+
+				Data = ((std::uint8_t *)Data) + x;
+			}
+
+			// Store the offset.
+			if (x < 128)  ((std::uint8_t *)Data)[-2] = (std::uint8_t)x;
+			else
+			{
+				// Align storage for a 32-bit integer.
+				Align = x;
+				x = 2 + 4 + (size_t)((std::uintptr_t)(((std::uint8_t *)Data) - 2) % 4);
+				((std::uint8_t *)Data)[-2] = (std::uint8_t)(128 + x);
+				((std::uint32_t *)(((std::uint8_t *)Data) - x))[0] = (std::uint32_t)Align;
+			}
+
+			// Store the bit position.
 			((std::uint8_t *)Data)[-1] = (std::uint8_t)Pos;
 
 			return Data;
 		}
 
-		void *TLS::realloc(void *Data, size_t NewSize, bool Cache)
+		void *TLS::realloc(void *Data, size_t NewSize, size_t Align, bool Cache)
 		{
 			if (NewSize == 0)
 			{
@@ -109,33 +129,28 @@ namespace CubicleSoft
 				return NULL;
 			}
 
-			if (Data == NULL)  return malloc(NewSize);
+			if (Data == NULL)  return malloc(NewSize, Align);
 
-			// See if it fits in the current size.
-			size_t Pos = NormalizeBitPosition(NewSize);
-			size_t Pos2 = (size_t)((std::uint8_t *)Data)[-1];
-			if (Pos <= Pos2)  return Data;
+			// See if the new size fits within the current size and is aligned correctly.
+			if (!Align)  Align = (NewSize > 4 ? 8 : (NewSize > 2 ? 4 : 2));
+			size_t NewSize2 = NewSize + Align - 1;
+			size_t NewPos = NormalizeBitPosition(NewSize2);
+			size_t PrevPos = (size_t)((std::uint8_t *)Data)[-1];
+			if (NewPos <= PrevPos && (std::uintptr_t)Data % Align == 0)  return Data;
 
 			StaticVector<Queue<char>> *MainPtr = GetMainPtr();
 			if (MainPtr == NULL)  return NULL;
 
 			void *Data2;
-			if (MainPtr->GetSize() <= Pos && MainPtr->GetSize() <= Pos2)
-			{
-				Data2 = ::realloc(((std::uint8_t *)Data) - 1, 1 + NewSize);
-				Data2 = (std::uint8_t *)Data2 + 1;
-			}
-			else
-			{
-				// Allocate data.
-				Data2 = malloc(NewSize);
 
-				// Copy the data.
-				memcpy(Data2, Data, (1 << Pos2));
+			// Allocate data.
+			Data2 = malloc(NewSize, Align);
 
-				// Free the previous object.
-				free(Data, Cache);
-			}
+			// Copy the data.
+			memcpy(Data2, Data, (1 << PrevPos));
+
+			// Free the previous object.
+			free(Data, Cache);
 
 			return Data2;
 		}
@@ -166,10 +181,15 @@ namespace CubicleSoft
 			if (MainPtr == NULL)  return;
 
 			size_t Pos = (size_t)((std::uint8_t *)Data)[-1];
-			if (MainPtr->GetSize() <= Pos)  ::free(((std::uint8_t *)Data) - 1);
+
+			size_t Offset = (size_t)((std::uint8_t *)Data)[-2];
+			if (Offset >= 128)  Offset = (size_t)(((std::uint32_t *)(((std::uint8_t *)Data) - (Offset - 128)))[0]);
+			Offset += 2;
+
+			if (MainPtr->GetSize() <= Pos)  ::free(((std::uint8_t *)Data) - Offset);
 			else
 			{
-				QueueNode<char> *Node = (QueueNode<char> *)(((std::uint8_t *)Data) - 1);
+				QueueNode<char> *Node = (QueueNode<char> *)(((std::uint8_t *)Data) - Offset);
 
 				if (!Cache)  ::free(Node);
 				else
@@ -300,7 +320,7 @@ namespace CubicleSoft
 		{
 			MxMode = TMV_Str;
 			if (MxStr != NULL)  MxTLS->free(MxStr);
-			MxStr = (char *)MxTLS->malloc(size + 1);
+			MxStr = (char *)MxTLS->malloc(size + 1, 1);
 			memcpy(MxStr, str, size);
 			MxStrPos = size;
 			MxStr[MxStrPos] = '\0';
@@ -313,7 +333,7 @@ namespace CubicleSoft
 
 		void TLS::MixedVar::PrependData(const char *str, size_t size)
 		{
-			char *str2 = (char *)MxTLS->malloc(size + MxStrPos + 1);
+			char *str2 = (char *)MxTLS->malloc(size + MxStrPos + 1, 1);
 			memcpy(str2, str, size);
 			memcpy(str2 + size, MxStr, MxStrPos);
 			MxTLS->free(MxStr);
@@ -327,9 +347,34 @@ namespace CubicleSoft
 			PrependData(str, strlen(str));
 		}
 
+		void TLS::MixedVar::PrependInt(const std::int64_t val, size_t radix)
+		{
+			char tempbuffer[44];
+			if (IntToString(tempbuffer, sizeof(tempbuffer), val, radix))  PrependStr(tempbuffer);
+		}
+
+		void TLS::MixedVar::PrependUInt(const std::uint64_t val, size_t radix)
+		{
+			char tempbuffer[44];
+			if (IntToString(tempbuffer, sizeof(tempbuffer), val, radix))  PrependStr(tempbuffer);
+		}
+
+		void TLS::MixedVar::PrependDouble(const double val, const size_t precision)
+		{
+			char tempbuffer[100];
+#if (defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(WIN64)) && defined(_MSC_VER) && _MSC_VER < 1900
+			_snprintf_s(tempbuffer, sizeof(tempbuffer), _TRUNCATE, "%1.*g", precision, val);
+			tempbuffer[sizeof(tempbuffer) - 1] = '\0';
+#else
+			snprintf(tempbuffer, sizeof(tempbuffer), "%1.*g", (int)precision, val);
+#endif
+
+			PrependStr(tempbuffer);
+		}
+
 		void TLS::MixedVar::AppendData(const char *str, size_t size)
 		{
-			MxStr = (char *)MxTLS->realloc(MxStr, MxStrPos + size + 1);
+			MxStr = (char *)MxTLS->realloc(MxStr, MxStrPos + size + 1, 1);
 			memcpy(MxStr + MxStrPos, str, size);
 			MxStrPos += size;
 			MxStr[MxStrPos] = '\0';
@@ -340,9 +385,34 @@ namespace CubicleSoft
 			AppendData(str, strlen(str));
 		}
 
+		void TLS::MixedVar::AppendInt(const std::int64_t val, size_t radix)
+		{
+			char tempbuffer[44];
+			if (IntToString(tempbuffer, sizeof(tempbuffer), val, radix))  AppendStr(tempbuffer);
+		}
+
+		void TLS::MixedVar::AppendUInt(const std::uint64_t val, size_t radix)
+		{
+			char tempbuffer[44];
+			if (IntToString(tempbuffer, sizeof(tempbuffer), val, radix))  AppendStr(tempbuffer);
+		}
+
+		void TLS::MixedVar::AppendDouble(const double val, const size_t precision)
+		{
+			char tempbuffer[100];
+#if (defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(WIN64)) && defined(_MSC_VER) && _MSC_VER < 1900
+			_snprintf_s(tempbuffer, sizeof(tempbuffer), _TRUNCATE, "%1.*g", precision, val);
+			tempbuffer[sizeof(tempbuffer) - 1] = '\0';
+#else
+			snprintf(tempbuffer, sizeof(tempbuffer), "%1.*g", (int)precision, val);
+#endif
+
+			AppendStr(tempbuffer);
+		}
+
 		void TLS::MixedVar::AppendChar(char chr)
 		{
-			MxStr = (char *)MxTLS->realloc(MxStr, MxStrPos + 2);
+			MxStr = (char *)MxTLS->realloc(MxStr, MxStrPos + 2, 1);
 			MxStr[MxStrPos++] = chr;
 			MxStr[MxStrPos] = '\0';
 		}
@@ -354,7 +424,7 @@ namespace CubicleSoft
 
 		void TLS::MixedVar::SetSize(size_t pos)
 		{
-			if (MxStrPos < pos)  MxStr = (char *)MxTLS->realloc(MxStr, pos + 1);
+			if (MxStrPos < pos)  MxStr = (char *)MxTLS->realloc(MxStr, pos + 1, 1);
 
 			MxStrPos = pos;
 			MxStr[MxStrPos] = '\0';
@@ -388,6 +458,267 @@ namespace CubicleSoft
 		size_t TLS::MixedVar::ReplaceStr(const char *src, const char *dest)
 		{
 			return ReplaceData(src, strlen(src), dest, strlen(dest));
+		}
+
+		// Swiped and slightly modified from Int::ToString().
+		bool TLS::MixedVar::IntToString(char *Result, size_t Size, std::uint64_t Num, size_t Radix)
+		{
+			if (Size < 2)  return false;
+
+			size_t x = Size, z;
+
+			Result[--x] = '\0';
+			if (!Num)  Result[--x] = '0';
+			else
+			{
+				while (Num && x)
+				{
+					z = Num % Radix;
+					Result[--x] = (char)(z > 9 ? z - 10 + 'A' : z + '0');
+					Num /= Radix;
+				}
+
+				if (Num)  return false;
+			}
+
+			memmove(Result, Result + x, Size - x);
+
+			return true;
+		}
+
+		bool TLS::MixedVar::IntToString(char *Result, size_t Size, std::int64_t Num, size_t Radix)
+		{
+			if (Num >= 0)  return IntToString(Result, Size, (std::uint64_t)Num, Radix);
+
+			if (Size < 2)  return false;
+			Result[0] = '-';
+
+			return IntToString(Result + 1, Size - 1, (std::uint64_t)-Num, Radix);
+		}
+
+
+		// Wide character MixedVar.
+		TLS::WCMixedVar::WCMixedVar(TLS *TLSPtr) : MxMode(TMV_None), MxInt(0), MxDouble(0.0), MxStr(NULL), MxStrPos(0), MxTLS(TLSPtr)
+		{
+		}
+
+		TLS::WCMixedVar::~WCMixedVar()
+		{
+			if (MxStr != NULL)  MxTLS->free(MxStr);
+		}
+
+		// Copy constructor.
+		TLS::WCMixedVar::WCMixedVar(const TLS::WCMixedVar &TempVar)
+		{
+			MxTLS = TempVar.MxTLS;
+
+			MxStr = NULL;
+			MxStrPos = 0;
+			if (TempVar.MxStr != NULL)
+			{
+				SetSize(TempVar.MxStrPos);
+				memcpy(MxStr, TempVar.MxStr, MxStrPos * sizeof(WCHAR));
+			}
+
+			MxMode = TempVar.MxMode;
+			MxInt = TempVar.MxInt;
+			MxDouble = TempVar.MxDouble;
+		}
+
+		// Assignment operator.
+		TLS::WCMixedVar &TLS::WCMixedVar::operator=(const TLS::WCMixedVar &TempVar)
+		{
+			if (this != &TempVar)
+			{
+				MxTLS = TempVar.MxTLS;
+
+				if (TempVar.MxStr != NULL)
+				{
+					SetSize(TempVar.MxStrPos);
+					memcpy(MxStr, TempVar.MxStr, MxStrPos * sizeof(WCHAR));
+				}
+				else
+				{
+					MxTLS->free(MxStr);
+
+					MxStr = NULL;
+					MxStrPos = 0;
+				}
+
+				MxMode = TempVar.MxMode;
+				MxInt = TempVar.MxInt;
+				MxDouble = TempVar.MxDouble;
+			}
+
+			return *this;
+		}
+
+		void TLS::WCMixedVar::SetStr(const WCHAR *str)
+		{
+			MxMode = TMV_Str;
+			size_t y = wcslen(str) + 1;
+			size_t y2 = y * sizeof(WCHAR);
+
+			if (MxStr != NULL)  MxTLS->free(MxStr);
+			MxStr = (WCHAR *)MxTLS->malloc(y2, sizeof(WCHAR));
+			memcpy(MxStr, str, y2);
+			MxStrPos = y - 1;
+		}
+
+		// Doesn't do anything fancy beyond expanding characters to fill the space of a wide character.
+		void TLS::WCMixedVar::SetStr(const char *str)
+		{
+			MxMode = TMV_Str;
+			size_t y = strlen(str) + 1;
+			size_t y2 = y * sizeof(WCHAR);
+
+			if (MxStr != NULL)  MxTLS->free(MxStr);
+			MxStr = (WCHAR *)MxTLS->malloc(y2, sizeof(WCHAR));
+			for (size_t x = 0; x < y; x++)  MxStr[x] = (WCHAR)*str++;
+			MxStrPos = y - 1;
+		}
+
+		void TLS::WCMixedVar::PrependStr(const WCHAR *str)
+		{
+			size_t y = wcslen(str);
+
+			WCHAR *str2 = (WCHAR *)MxTLS->malloc((y + MxStrPos + 1) * sizeof(WCHAR), sizeof(WCHAR));
+			memcpy(str2, str, y * sizeof(WCHAR));
+			memcpy(str2 + y, MxStr, (MxStrPos + 1) * sizeof(WCHAR));
+			MxTLS->free(MxStr);
+
+			MxStr = str2;
+			MxStrPos += y;
+		}
+
+		// Doesn't do anything fancy beyond expanding characters to fill the space of a wide character.
+		void TLS::WCMixedVar::PrependStr(const char *str)
+		{
+			size_t y = strlen(str);
+
+			WCHAR *str2 = (WCHAR *)MxTLS->malloc((y + MxStrPos + 1) * sizeof(WCHAR), sizeof(WCHAR));
+			for (size_t x = 0; x < y; x++)  str2[x] = (WCHAR)*str++;
+			memcpy(str2 + y, MxStr, (MxStrPos + 1) * sizeof(WCHAR));
+			MxTLS->free(MxStr);
+
+			MxStr = str2;
+			MxStrPos += y;
+		}
+
+		void TLS::WCMixedVar::PrependInt(const std::int64_t val, size_t radix)
+		{
+			char tempbuffer[44];
+			if (TLS::MixedVar::IntToString(tempbuffer, sizeof(tempbuffer), val, radix))  PrependStr(tempbuffer);
+		}
+
+		void TLS::WCMixedVar::PrependUInt(const std::uint64_t val, size_t radix)
+		{
+			char tempbuffer[44];
+			if (TLS::MixedVar::IntToString(tempbuffer, sizeof(tempbuffer), val, radix))  PrependStr(tempbuffer);
+		}
+
+		void TLS::WCMixedVar::PrependDouble(const double val, const size_t precision)
+		{
+			char tempbuffer[100];
+#if (defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(WIN64)) && defined(_MSC_VER) && _MSC_VER < 1900
+			_snprintf_s(tempbuffer, sizeof(tempbuffer), _TRUNCATE, "%1.*g", precision, val);
+			tempbuffer[sizeof(tempbuffer) - 1] = '\0';
+#else
+			snprintf(tempbuffer, sizeof(tempbuffer), "%1.*g", (int)precision, val);
+#endif
+
+			PrependStr(tempbuffer);
+		}
+
+		void TLS::WCMixedVar::AppendStr(const WCHAR *str)
+		{
+			size_t y = wcslen(str);
+
+			MxStr = (WCHAR *)MxTLS->realloc(MxStr, (MxStrPos + y + 1) * sizeof(WCHAR), sizeof(WCHAR));
+			memcpy(MxStr + MxStrPos, str, (y + 1) * sizeof(WCHAR));
+			MxStrPos += y;
+		}
+
+		// Doesn't do anything fancy beyond expanding characters to fill the space of a wide character.
+		void TLS::WCMixedVar::AppendStr(const char *str)
+		{
+			size_t y = strlen(str);
+
+			MxStr = (WCHAR *)MxTLS->realloc(MxStr, (MxStrPos + y + 1) * sizeof(WCHAR), sizeof(WCHAR));
+			while (*str)  MxStr[MxStrPos++] = (WCHAR)*str++;
+			MxStr[MxStrPos] = L'\0';
+		}
+
+		void TLS::WCMixedVar::AppendInt(const std::int64_t val, size_t radix)
+		{
+			char tempbuffer[44];
+			if (TLS::MixedVar::IntToString(tempbuffer, sizeof(tempbuffer), val, radix))  AppendStr(tempbuffer);
+		}
+
+		void TLS::WCMixedVar::AppendUInt(const std::uint64_t val, size_t radix)
+		{
+			char tempbuffer[44];
+			if (TLS::MixedVar::IntToString(tempbuffer, sizeof(tempbuffer), val, radix))  AppendStr(tempbuffer);
+		}
+
+		void TLS::WCMixedVar::AppendDouble(const double val, const size_t precision)
+		{
+			char tempbuffer[100];
+#if (defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(WIN64)) && defined(_MSC_VER) && _MSC_VER < 1900
+			_snprintf_s(tempbuffer, sizeof(tempbuffer), _TRUNCATE, "%1.*g", precision, val);
+			tempbuffer[sizeof(tempbuffer) - 1] = '\0';
+#else
+			snprintf(tempbuffer, sizeof(tempbuffer), "%1.*g", (int)precision, val);
+#endif
+
+			AppendStr(tempbuffer);
+		}
+
+		void TLS::WCMixedVar::AppendChar(WCHAR chr)
+		{
+			MxStr = (WCHAR *)MxTLS->realloc(MxStr, (MxStrPos + 2) * sizeof(WCHAR), sizeof(WCHAR));
+			MxStr[MxStrPos++] = chr;
+			MxStr[MxStrPos] = L'\0';
+		}
+
+		void TLS::WCMixedVar::AppendMissingChar(WCHAR chr)
+		{
+			if (!MxStrPos || MxStr[MxStrPos - 1] != chr)  AppendChar(chr);
+		}
+
+		void TLS::WCMixedVar::SetSize(size_t pos)
+		{
+			if (MxStrPos < pos)  MxStr = (WCHAR *)MxTLS->realloc(MxStr, pos + 1, sizeof(WCHAR));
+
+			MxStrPos = pos;
+			MxStr[MxStrPos] = L'\0';
+		}
+
+		size_t TLS::WCMixedVar::ReplaceStr(const WCHAR *src, const WCHAR *dest)
+		{
+			size_t srcsize = wcslen(src);
+			size_t destsize = wcslen(dest);
+			size_t Num;
+
+			if (srcsize < destsize)
+			{
+				WCHAR *Result;
+				size_t ResultSize;
+
+				Num = FastReplaceAlloc<WCHAR, TLS>::ReplaceAll(Result, ResultSize, MxStr, MxStrPos, src, srcsize, dest, destsize, MxTLS);
+
+				MxTLS->free(MxStr);
+				MxStr = Result;
+				MxStrPos = ResultSize;
+			}
+			else
+			{
+				Num = FastReplaceAlloc<WCHAR, TLS>::StaticReplaceAll(MxStr, MxStrPos, MxStr, MxStrPos, src, srcsize, dest, destsize, MxTLS);
+			}
+
+			MxStr[MxStrPos] = L'\0';
+
+			return Num;
 		}
 	}
 }
