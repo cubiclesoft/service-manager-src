@@ -1,6 +1,6 @@
 // A simple program whose sole job is to manage a single executable as a service.
 // Platform and language agnostic (once compiled).
-// (C) 2018 CubicleSoft.  All Rights Reserved.
+// (C) 2021 CubicleSoft.  All Rights Reserved.
 
 #ifndef UNICODE
 #define UNICODE
@@ -1101,15 +1101,19 @@ int _tmain(int argc, TCHAR **argv)
 
 		TempFile.Close();
 
+		UTF8::File::FileStat TempStat;
+
 		_tprintf(_T("Service reloading..."));
 		fflush(stdout);
-		while (UTF8::File::Exists(TempBuffer.MxStr))
+		while (UTF8::File::Stat(TempStat, TempBuffer.MxStr) && !TempStat.st_size)
 		{
 			::Sleep(1000);
 			_tprintf(_T("."));
 			fflush(stdout);
 		}
 		_tprintf(_T("\n"));
+
+		UTF8::File::Delete(TempBuffer.MxStr);
 
 		_tprintf(_T("Service successfully reloaded.\n"));
 	}
@@ -1387,6 +1391,12 @@ int _tmain(int argc, TCHAR **argv)
 #pragma message("Compiling for Mac OSX...")
 #else
 #pragma message("Compiling for *NIX...")
+#endif
+
+#if (defined(__GNUC__) && __GNUC__ >= 7) || (defined(__clang__) && __clang_major__ >= 12)
+	#define FALL_THROUGH __attribute__ ((fallthrough))
+#else
+	#define FALL_THROUGH ((void)0)
 #endif
 
 void DumpSyntax(char *currfile)
@@ -2402,14 +2412,14 @@ int main(int argc, char **argv)
 	else if (!strcasecmp(GxApp.MxMainAction, "reload"))
 	{
 		// Reload service configuration.
-		StaticMixedVar<char[8192]> TempBuffer;
+		StaticMixedVar<char[8192]> TempBuffer, TempBuffer2;
 
 		if (!GetServiceInfoStr("notify", TempBuffer))  return 1;
 
 		TempBuffer.AppendStr(".reload");
 
 		UTF8::File TempFile;
-		if (!TempFile.Open(TempBuffer.MxStr, O_CREAT | O_WRONLY | O_TRUNC, UTF8::File::ShareBoth, 0666))
+		if (!TempFile.Open(TempBuffer.MxStr, O_CREAT | O_WRONLY | O_TRUNC, UTF8::File::ShareBoth, 0664))
 		{
 			printf("Unable to create '%s'.\n", TempBuffer.MxStr);
 
@@ -2418,15 +2428,47 @@ int main(int argc, char **argv)
 
 		TempFile.Close();
 
+		// Adjust file permissions.
+		if (!UTF8::File::Chmod(TempBuffer.MxStr, 0664))
+		{
+			printf("Unable to set '%s' to 0664.\n", TempBuffer.MxStr);
+
+			UTF8::File::Delete(TempBuffer.MxStr);
+
+			return 1;
+		}
+
+		if (GetServiceInfoStr("nix_user", TempBuffer2, true) && TempBuffer2.MxStrPos && !UTF8::File::Chown(TempBuffer.MxStr, TempBuffer2.MxStr))
+		{
+			printf("Unable to set '%s' to user '%s'.\n", TempBuffer.MxStr, TempBuffer2.MxStr);
+
+			UTF8::File::Delete(TempBuffer.MxStr);
+
+			return 1;
+		}
+
+		if (GetServiceInfoStr("nix_group", TempBuffer2, true) && TempBuffer2.MxStrPos && !UTF8::File::Chgrp(TempBuffer.MxStr, TempBuffer2.MxStr))
+		{
+			printf("Unable to set '%s' to group '%s'.\n", TempBuffer.MxStr, TempBuffer2.MxStr);
+
+			UTF8::File::Delete(TempBuffer.MxStr);
+
+			return 1;
+		}
+
+		UTF8::File::FileStat TempStat;
+
 		printf("Service reloading...");
 		fflush(stdout);
-		while (UTF8::File::Exists(TempBuffer.MxStr))
+		while (UTF8::File::Stat(TempStat, TempBuffer.MxStr) && !TempStat.st_size)
 		{
 			sleep(1);
 			printf(".");
 			fflush(stdout);
 		}
 		printf("\n");
+
+		UTF8::File::Delete(TempBuffer.MxStr);
 
 		printf("Service successfully reloaded.\n");
 	}
@@ -2917,6 +2959,7 @@ int main(int argc, char **argv)
 					WriteLog(LogFile, "Process force terminated.");
 
 					// Intentionally fall through to state 3.
+					FALL_THROUGH;
 				}
 				case 3:
 				{
