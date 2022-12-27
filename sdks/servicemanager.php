@@ -68,7 +68,7 @@
 		public function WaitFor($servicename, $display = false)
 		{
 			$cmd = escapeshellarg($this->GetServiceManagerRealpath());
-			$cmd .= " status " . escapeshellarg($servicename);
+			$cmd .= " waitfor " . escapeshellarg($servicename);
 
 			return $this->RunCommand($cmd, $display);
 		}
