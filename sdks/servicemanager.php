@@ -1,6 +1,6 @@
 <?php
 	// Service Manager interface PHP SDK.
-	// (C) 2016 CubicleSoft.  All Rights Reserved.
+	// (C) 2022 CubicleSoft.  All Rights Reserved.
 
 	class ServiceManager
 	{
