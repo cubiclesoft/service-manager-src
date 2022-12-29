@@ -1,6 +1,6 @@
 // A simple program whose sole job is to manage a single executable as a service.
 // Platform and language agnostic (once compiled).
-// (C) 2021 CubicleSoft.  All Rights Reserved.
+// (C) 2022 CubicleSoft.  All Rights Reserved.
 
 #ifndef UNICODE
 #define UNICODE
@@ -176,6 +176,12 @@ void DumpSyntax(TCHAR *currfile)
 	_tprintf(_T("\tDEBUG_PROCESS\n"));
 	_tprintf(_T("\tDETACHED_PROCESS\n"));
 	_tprintf(_T("\tINHERIT_PARENT_AFFINITY\n\n"));
+
+	_tprintf(_T("-wingroup=LoadOrderGroup\n"));
+	_tprintf(_T("\tSets the load order group for the service.\n\tInstall only.  Windows only.\n\n"));
+
+	_tprintf(_T("-windeps=Dependencies\n"));
+	_tprintf(_T("\tSets the slash (/) separated dependencies for the service.\n\tInstall only.  Windows only.\n\n"));
 }
 
 void DisplayError(TCHAR *intro)
@@ -213,6 +219,8 @@ public:
 	DWORD MxCreateFlags = 0;
 #endif
 	LPTSTR MxStartDir = NULL;
+	LPTSTR MxLoadOrderGroup = NULL;
+	LPTSTR MxDependencies = NULL;
 	LPTSTR MxServiceName = NULL;
 	LPTSTR MxMainAction = NULL;
 	STARTUPINFO MxStartInfo;
@@ -276,6 +284,8 @@ bool ProcessArgs(int argc, TCHAR **argv)
 		else if (!_tcsicmp(argv[x], _T("-winflag=DEBUG_PROCESS")))  GxApp.MxCreateFlags |= DEBUG_PROCESS;
 		else if (!_tcsicmp(argv[x], _T("-winflag=DETACHED_PROCESS")))  GxApp.MxCreateFlags |= DETACHED_PROCESS;
 		else if (!_tcsicmp(argv[x], _T("-winflag=INHERIT_PARENT_AFFINITY")))  GxApp.MxCreateFlags |= INHERIT_PARENT_AFFINITY;
+		else if (!_tcsncicmp(argv[x], _T("-wingroup="), 10))  GxApp.MxLoadOrderGroup = argv[x] + 10;
+		else if (!_tcsncicmp(argv[x], _T("-windeps="), 9))  GxApp.MxDependencies = argv[x] + 9;
 		else if (!_tcsicmp(argv[x], _T("-?")))
 		{
 			DumpSyntax(argv[0]);
@@ -857,6 +867,23 @@ int _tmain(int argc, TCHAR **argv)
 		y = sizeof(CmdLine) / sizeof(WCHAR);
 		TempBuffer.ConvertFromUTF8(CmdLine, y);
 
+		// Copy dependencies (if any).
+		WCHAR Dependencies[8192];
+		if (GxApp.MxDependencies != NULL)
+		{
+			y = wcslen(GxApp.MxDependencies);
+			if (y > 8190)  y = 8190;
+
+			for (int x = 0; x < (int)y; x++)
+			{
+				if (GxApp.MxDependencies[x] == L'/')  Dependencies[x] = '\0';
+				else  Dependencies[x] = GxApp.MxDependencies[x];
+			}
+
+			Dependencies[y] = '\0';
+			Dependencies[y + 1] = '\0';
+		}
+
 		SC_HANDLE scm = ::OpenSCManager(NULL, SERVICES_ACTIVE_DATABASE, SC_MANAGER_ALL_ACCESS);
 		if (scm == NULL)
 		{
@@ -867,7 +894,7 @@ int _tmain(int argc, TCHAR **argv)
 			return 1;
 		}
 
-		SC_HANDLE service = ::CreateServiceW(scm, GxApp.MxServiceName, GxApp.MxServiceName, SERVICE_ALL_ACCESS, SERVICE_WIN32_OWN_PROCESS, SERVICE_AUTO_START, SERVICE_ERROR_NORMAL, CmdLine, NULL, NULL, NULL, NULL, NULL);
+		SC_HANDLE service = ::CreateServiceW(scm, GxApp.MxServiceName, GxApp.MxServiceName, SERVICE_ALL_ACCESS, SERVICE_WIN32_OWN_PROCESS, SERVICE_AUTO_START, SERVICE_ERROR_NORMAL, CmdLine, GxApp.MxLoadOrderGroup, NULL, (GxApp.MxDependencies == NULL ? NULL : Dependencies), NULL, NULL);
 		if (service == NULL)
 		{
 			DisplayError(_T("Error creating service.\n"));
